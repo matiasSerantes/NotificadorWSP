@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Notificador WhatsApp</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Encabezado con Interruptor Principal -->
+  <header class="header">
+    <div class="header-title">
+      <svg class="header-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67Z"/>
+      </svg>
+      <span>Control WhatsApp</span>
+    </div>
+    <span id="badge-estado" class="badge-pill">Verificando...</span>
+  </header>
+
+  <main class="container">
+    <!-- BOTÓN DE INICIO / DETENCIÓN DE SERVICIO -->
+    <div class="service-control-wrapper">
+      <button id="btn-servicio" class="btn-service btn-service-off">
+        <span class="service-icon">▶️</span>
+        <span id="texto-btn-servicio">INICIAR SERVICIO</span>
+      </button>
+    </div>
+
+    <!-- Identificación del Usuario y Correo Gmail -->
+    <section class="card user-card">
+      <label for="input-nombre" class="card-label">👤 Nombre y Apellido:</label>
+      <input type="text" id="input-nombre" placeholder="Ej. Juan Pérez" autocomplete="name">
+
+      <label for="input-correo" class="card-label" style="margin-top: 6px;">📧 Correo Gmail:</label>
+      <input type="email" id="input-correo" placeholder="tunombre@gmail.com" autocomplete="email">
+
+      <div class="user-card-actions">
+        <button id="btn-guardar-usuario" class="btn-secondary">Guardar Datos</button>
+        <span id="msg-usuario-guardado" class="text-mini text-success" style="display: none;">¡Guardado!</span>
+      </div>
+    </section>
+
+    <!-- Estado Actual y Botón de Revisión -->
+    <section id="panel-estado" class="card status-card">
+      <div id="status-icon" class="status-icon">🔄</div>
+      <h2 id="status-title" class="status-title">Conectando...</h2>
+      <p id="status-desc" class="status-desc">Obteniendo estado del turno...</p>
+
+      <button id="btn-revisar" class="btn-primary" style="display: none;">
+        🙋 RESPONDER NOTIFICACIÓN
+      </button>
+    </section>
+
+    <!-- Registro de Actividad (Log del día) -->
+    <section class="card log-card">
+      <div class="card-header-row">
+        <h3 class="card-subtitle">📋 Historial de Revisiones (Hoy)</h3>
+        <button id="btn-refrescar" class="btn-icon" title="Refrescar estado">🔄</button>
+      </div>
+      <div id="log-lista" class="log-lista">
+        <p class="text-mini text-muted">Cargando registros...</p>
+      </div>
+    </section>
+
+    <!-- Enlace a Google Sheets / Drive -->
+    <div class="actions-row">
+      <button id="btn-abrir-sheets" class="btn-outline">
+        📊 Abrir Excel en Google Drive
+      </button>
+    </div>
+
+    <!-- Configuración y Enlaces (Colapsable con auto-sincronización) -->
+    <details class="details-config" open>
+      <summary class="summary-title">⚙️ Configuración y Enlaces</summary>
+      <div class="config-content">
+        <button id="btn-sync-online" class="btn-sync">
+          🔄 Sincronizar Configuración desde Excel en línea
+        </button>
+
+        <label for="input-sheets-url" class="card-label" style="margin-top: 6px;">URL de tu Excel en Google Drive:</label>
+        <input type="url" id="input-sheets-url" placeholder="https://docs.google.com/spreadsheets/d/.../edit">
+
+        <label for="input-url" class="card-label" style="margin-top: 6px;">URL de Google Apps Script:</label>
+        <input type="url" id="input-url" placeholder="https://script.google.com/macros/s/.../exec">
+
+        <div class="btn-row" style="margin-top: 6px;">
+          <button id="btn-guardar-url" class="btn-secondary">Guardar Conexión</button>
+          <button id="btn-probar-notif" class="btn-secondary">Probar Alerta</button>
+        </div>
+        <p id="msg-url-guardada" class="text-mini text-success" style="display: none;">¡Configuración guardada!</p>
+      </div>
+    </details>
+  </main>
+
+  <footer class="footer">
+    <span id="horario-label">Horario: 08:00 a 18:00 hs</span>
+    <span id="hora-servidor">--:--</span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

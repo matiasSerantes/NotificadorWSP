@@ -1,0 +1,381 @@
+/* Estilos del Popup de la Extensión */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 360px;
+  min-height: 520px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f0f2f5;
+  color: #111827;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Cabecera verde WhatsApp */
+.header {
+  background-color: #005c4b;
+  color: #ffffff;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.header-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.badge-pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.badge-pill.alerta {
+  background-color: #ef4444;
+}
+
+.badge-pill.resuelto {
+  background-color: #25d366;
+  color: #0b4e39;
+}
+
+.badge-pill.apagado {
+  background-color: #6b7280;
+}
+
+.container {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+/* BOTÓN DE SERVICIO PRINCIPAL */
+.service-control-wrapper {
+  display: flex;
+}
+
+.btn-service {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-service-off {
+  background-color: #ffffff;
+  color: #005c4b;
+  border: 2px solid #005c4b;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+}
+
+.btn-service-off:hover {
+  background-color: #f0fdf4;
+}
+
+.btn-service-on {
+  background: linear-gradient(135deg, #10b981 0%, #047857 100%);
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.4);
+}
+
+.btn-service-on:hover {
+  opacity: 0.95;
+}
+
+/* Tarjetas */
+.card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border: 1px solid #e5e7eb;
+}
+
+.card-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.card-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.user-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+input[type="text"], input[type="email"], input[type="url"] {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus {
+  border-color: #005c4b;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-secondary {
+  background-color: #e5e7eb;
+  color: #374151;
+  padding: 6px 12px;
+  font-size: 11px;
+}
+
+.btn-secondary:hover {
+  background-color: #d1d5db;
+}
+
+.btn-sync {
+  width: 100%;
+  padding: 8px 10px;
+  background-color: #005c4b;
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  box-shadow: 0 1px 3px rgba(0,92,75,0.2);
+}
+
+.btn-sync:hover {
+  background-color: #02735e;
+}
+
+.btn-icon {
+  background: transparent;
+  padding: 4px;
+  font-size: 14px;
+}
+
+.btn-icon:hover {
+  transform: rotate(45deg);
+}
+
+.btn-primary {
+  width: 100%;
+  margin-top: 10px;
+  background-color: #25d366;
+  color: #ffffff;
+  padding: 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  box-shadow: 0 3px 6px rgba(37, 211, 102, 0.35);
+  animation: pulse-btn 2s infinite;
+}
+
+@keyframes pulse-btn {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.btn-primary:hover {
+  background-color: #20ba59;
+}
+
+.btn-outline {
+  width: 100%;
+  padding: 9px;
+  border: 1px dashed #005c4b;
+  color: #005c4b;
+  background: #f0fdf4;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.btn-outline:hover {
+  background-color: #dcfce7;
+}
+
+/* Tarjeta de estado dinámico */
+.status-card {
+  text-align: center;
+  padding: 14px;
+  transition: background-color 0.3s;
+}
+
+.status-card.desconectado {
+  background-color: #f9fafb;
+  border: 1px dashed #9ca3af;
+}
+
+.status-card.pendiente {
+  border: 2px solid #ef4444;
+  background-color: #fef2f2;
+}
+
+.status-card.resuelto {
+  border: 1px solid #86efac;
+  background-color: #f0fdf4;
+}
+
+.status-card.fuera {
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+}
+
+.status-icon {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.status-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.status-desc {
+  font-size: 12px;
+  color: #4b5563;
+  line-height: 1.4;
+}
+
+.log-lista {
+  max-height: 120px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.log-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  padding: 6px 8px;
+  background-color: #f9fafb;
+  border-radius: 5px;
+  border-left: 3px solid #005c4b;
+}
+
+.log-item-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.log-turno {
+  font-weight: 600;
+  color: #111827;
+}
+
+.log-persona {
+  color: #4b5563;
+  font-size: 10px;
+}
+
+.log-hora {
+  font-size: 10px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.details-config {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  font-size: 12px;
+}
+
+.summary-title {
+  cursor: pointer;
+  font-weight: 600;
+  color: #4b5563;
+  user-select: none;
+}
+
+.config-content {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-row {
+  display: flex;
+  gap: 6px;
+}
+
+.text-mini {
+  font-size: 11px;
+}
+
+.text-success {
+  color: #16a34a;
+}
+
+.text-muted {
+  color: #6b7280;
+}
+
+.footer {
+  margin-top: auto;
+  background-color: #e5e7eb;
+  padding: 6px 14px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #4b5563;
+}
