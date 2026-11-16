@@ -1,9 +1,10 @@
 @echo off
 setlocal
-title Actualizador Automatico - Notificador WhatsApp
+cd /d "%~dp0"
+title Actualizador e Instalador - Notificador WhatsApp
 
 echo ================================================================
-echo       ACTUALIZADOR AUTOMATICO - NOTIFICADOR WHATSAPP
+echo       ACTUALIZADOR E INSTALADOR - NOTIFICADOR WHATSAPP
 echo ================================================================
 echo.
 
@@ -14,22 +15,6 @@ REM -----------------------------------------------------------------
 set REPO_URL=https://github.com/matiasSerantes/NotificadorWSP.git
 set RAMA=main
 
-if "%REPO_URL%"=="PENDIENTE_REPOSITORIO" (
-    echo [ESTADO: PENDIENTE DE REPOSITORIO]
-    echo ----------------------------------------------------------------
-    echo Aun no has colocado el enlace de tu repositorio Git.
-    echo.
-    echo Pasos para activarlo cuando tengas el repositorio:
-    echo  1. Abre este archivo autoupdate.bat con el Bloc de Notas.
-    echo  2. Busca la linea que dice set REPO_URL=PENDIENTE_REPOSITORIO
-    echo  3. Reemplaza PENDIENTE_REPOSITORIO por la URL de tu repositorio.
-    echo  4. Guarda el archivo y ejecutalo nuevamente.
-    echo ----------------------------------------------------------------
-    echo.
-    pause
-    exit /b 0
-)
-
 where git >nul 2>nul
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] No se encontro Git instalado en tu equipo.
@@ -39,36 +24,72 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-echo [1/2] Conectando con el repositorio remoto...
+echo [1/3] Conectando con el repositorio y descargando actualizaciones...
 echo Repositorio: %REPO_URL%
 echo Rama: %RAMA%
 echo.
 
 if exist ".git" (
-    echo [2/2] Descargando ultimas actualizaciones...
     git fetch origin %RAMA%
     git pull origin %RAMA%
 ) else (
-    echo [2/2] Inicializando repositorio local...
+    echo Inicializando repositorio local...
     git init
     git remote add origin %REPO_URL%
     git fetch origin %RAMA%
     git reset --hard origin/%RAMA%
 )
 
-if %ERRORLEVEL% equ 0 (
+if %ERRORLEVEL% neq 0 (
     echo.
-    echo ================================================================
-    echo  [EXITO] Archivos actualizados a la ultima version.
-    echo ================================================================
-    echo  Recuerda ir a chrome://extensions y presionar el boton
-    echo  de recarga en la extension para aplicar los cambios.
-    echo ================================================================
-) else (
+    echo [ALERTA] Ocurrio un problema al descargar los archivos.
+    echo Verifica tu conexion a internet o que el repositorio este publicado.
     echo.
-    echo [ALERTA] Ocurrio un problema al actualizar.
-    echo Verifica tu conexion a internet o el enlace del repositorio.
+    pause
+    exit /b 1
 )
 
 echo.
-pause
+echo [2/3] Configurando accesos directos y arranque en Windows...
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$wsh = New-Object -ComObject WScript.Shell; " ^
+    "$baseDir = (Get-Item .).FullName; " ^
+    "$targetVbs = Join-Path $baseDir 'windows-app\IniciarSilencioso.vbs'; " ^
+    "$iconPath = Join-Path $baseDir 'windows-app\icono.ico'; " ^
+    "$desk = [Environment]::GetFolderPath('Desktop'); " ^
+    "$deskLink = $wsh.CreateShortcut((Join-Path $desk 'Notificador WhatsApp.lnk')); " ^
+    "$deskLink.TargetPath = 'wscript.exe'; " ^
+    "$deskLink.Arguments = '\"' + $targetVbs + '\"'; " ^
+    "$deskLink.WorkingDirectory = (Join-Path $baseDir 'windows-app'); " ^
+    "$deskLink.Description = 'Notificador de WhatsApp'; " ^
+    "if (Test-Path $iconPath) { $deskLink.IconLocation = $iconPath }; " ^
+    "$deskLink.Save(); " ^
+    "$startFolder = [System.IO.Path]::Combine($env:APPDATA, 'Microsoft\Windows\Start Menu\Programs\Startup'); " ^
+    "$startLink = $wsh.CreateShortcut((Join-Path $startFolder 'NotificadorWSP.lnk')); " ^
+    "$startLink.TargetPath = 'wscript.exe'; " ^
+    "$startLink.Arguments = '\"' + $targetVbs + '\"'; " ^
+    "$startLink.WorkingDirectory = (Join-Path $baseDir 'windows-app'); " ^
+    "$startLink.Description = 'Notificador de WhatsApp en Inicio'; " ^
+    "if (Test-Path $iconPath) { $startLink.IconLocation = $iconPath }; " ^
+    "$startLink.Save(); " ^
+    "Write-Output 'Accesos directos configurados exitosamente.'"
+
+echo.
+echo [3/3] Iniciando servicio en segundo plano de Windows...
+start "" wscript.exe "windows-app\IniciarSilencioso.vbs"
+
+echo.
+echo ================================================================
+echo  [INSTALACION Y ACTUALIZACION COMPLETADA CON EXITO]
+echo ================================================================
+echo.
+echo  1. App de Windows: Ya quedo iniciada en la barra de tareas
+echo     al lado del reloj (icono verde de WhatsApp).
+echo  2. Auto-Arranque: Ya se iniciara sola al encender la PC.
+echo  3. Extension Chrome: Si usas la extension en el navegador,
+echo     recuerda hacer clic en recargar en chrome://extensions
+echo.
+echo ================================================================
+echo Presiona cualquier tecla para cerrar...
+pause > nul
