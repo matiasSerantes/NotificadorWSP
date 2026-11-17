@@ -49,38 +49,15 @@ function extraerFechaLimpia(v, tz) {
   }
   const s = String(v).trim();
   const match = s.match(/(\d{4}-\d{2}-\d{2})/);
-  return match ? match[1] : s;
+  if (match) return match[1];
+  const fecha = new Date(s);
+  return isNaN(fecha.getTime()) ? s : Utilities.formatDate(fecha, tz, 'yyyy-MM-dd');
 }
 
 function obtenerSpreadsheetRegistro() {
-  if (_ssRegistro) return _ssRegistro;
-
-  if (CONFIG_BASE.ID_SPREADSHEET_REGISTRO) {
-    try {
-      const ss1 = SpreadsheetApp.openById(CONFIG_BASE.ID_SPREADSHEET_REGISTRO);
-      if (ss1.getSheetByName(CONFIG_BASE.HOJA_REGISTRO) || ss1.getSheetByName('Registro Detallado')) {
-        _ssRegistro = ss1;
-        return _ssRegistro;
-      }
-    } catch (e) {
-      Logger.log('Error abriendo ID_SPREADSHEET_REGISTRO: ' + e.message);
-    }
+  if (!_ssRegistro) {
+    _ssRegistro = SpreadsheetApp.openById(CONFIG_BASE.ID_SPREADSHEET_REGISTRO);
   }
-
-  if (CONFIG_BASE.ID_SPREADSHEET_LOGS) {
-    try {
-      const ss2 = SpreadsheetApp.openById(CONFIG_BASE.ID_SPREADSHEET_LOGS);
-      if (ss2.getSheetByName(CONFIG_BASE.HOJA_REGISTRO) || ss2.getSheetByName('Registro Detallado')) {
-        _ssRegistro = ss2;
-        return _ssRegistro;
-      }
-    } catch (e) {}
-  }
-
-  try {
-    _ssRegistro = SpreadsheetApp.getActiveSpreadsheet();
-  } catch (e) {}
-
   return _ssRegistro;
 }
 
@@ -109,7 +86,7 @@ function obtenerHojaRegistro() {
   return ss.getSheetByName(CONFIG_BASE.HOJA_REGISTRO) ||
          ss.getSheetByName('Registro Detallado') ||
          ss.getSheetByName('Historial') ||
-         ss.getSheets()[0];
+         (() => { throw new Error('No existe la hoja Registro Detallado en la planilla configurada.'); })();
 }
 
 function obtenerHojaMatriz() {
@@ -137,14 +114,15 @@ function obtenerConfiguracionDinamica() {
     const filas = wsCfg.getRange(4, 1, Math.max(1, wsCfg.getLastRow() - 3), 2).getValues();
     for (let i = 0; i < filas.length; i++) {
       const p = String(filas[i][0]).toLowerCase().trim();
-      const v = String(filas[i][1]).trim();
+      const valor = filas[i][1];
+      const v = esFecha(valor) ? Utilities.formatDate(valor, config.timezone, 'HH:mm') : String(valor).trim();
 
       if (p.indexOf('hora inicio') !== -1) {
         const h = parseInt(v.split(':')[0], 10);
-        if (!isNaN(h)) config.horaInicio = h;
+        if (!isNaN(h) && h >= 0 && h < 24) config.horaInicio = h;
       } else if (p.indexOf('hora fin') !== -1) {
         const h = parseInt(v.split(':')[0], 10);
-        if (!isNaN(h)) config.horaFin = h;
+        if (!isNaN(h) && h > 0 && h <= 24) config.horaFin = h;
       } else if (p.indexOf('frecuencia') !== -1) {
         const m = parseInt(v, 10);
         if (!isNaN(m) && m > 0) config.frecuenciaMin = m;
@@ -204,42 +182,15 @@ function purgarRegistrosAntiguos(sheet) {
 function calcularIntervaloActual(fecha) {
   const cfg = obtenerConfiguracionDinamica();
   const f = fecha || new Date();
-  const dStr = Utilities.formatDate(f, cfg.timezone, 'yyyy-MM-dd');
-  const horas = parseInt(Utilities.formatDate(f, cfg.timezone, 'HH'), 10);
-  const minutos = parseInt(Utilities.formatDate(f, cfg.timezone, 'mm'), 10);
-
-  const freq = cfg.frecuenciaMin;
-  const slotInicioMin = Math.floor(minutos / freq) * freq;
-  const slotFinTotalMin = slotInicioMin + freq;
-  const slotFinHora = Math.floor(slotFinTotalMin / 60) > 0 ? horas + Math.floor(slotFinTotalMin / 60) : horas;
-  const slotFinMin = slotFinTotalMin % 60;
-
-  const minStr = ('0' + slotInicioMin).slice(-2);
-  const finMinStr = ('0' + slotFinMin).slice(-2);
-  const horaStr = ('0' + horas).slice(-2);
-  const finHoraStr = ('0' + slotFinHora).slice(-2);
-
-  const franjaTexto = `${horaStr}:${minStr} - ${finHoraStr}:${finMinStr}`;
-  const slotId = `${dStr} ${horaStr}:${minStr}`;
-
-  const diaNum = parseInt(Utilities.formatDate(f, cfg.timezone, 'u'), 10);
-  const diaNombre = DIAS_SEMANA[f.getDay()];
-  const esDiaLaboral = !cfg.soloLunesAViernes || (diaNum >= 1 && diaNum <= 5);
-  const enHorario = esDiaLaboral && (horas >= cfg.horaInicio && horas < cfg.horaFin);
-
-  const minutosTranscurridos = minutos - slotInicioMin;
-
-  return {
-    slotId: slotId,
-    franjaTexto: franjaTexto,
-    horaPad: `${horaStr}:${minStr}`,
-    enHorario: enHorario,
-    diaNombre: diaNombre,
-    diaNum: diaNum,
-    fechaStr: dStr,
-    minutosDemora: minutosTranscurridos,
-    cfg: cfg
-  };
+  const fechaStr = Utilities.formatDate(f, cfg.timezone, 'yyyy-MM-dd');
+  const diaNum = Number(Utilities.formatDate(f, cfg.timezone, 'u'));
+  const total = Number(Utilities.formatDate(f, cfg.timezone, 'HH')) * 60 + Number(Utilities.formatDate(f, cfg.timezone, 'mm'));
+  const inicio = cfg.horaInicio * 60;
+  const slot = inicio + Math.floor((total - inicio) / cfg.frecuenciaMin) * cfg.frecuenciaMin;
+  const hora = m => ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2);
+  return { slotId: fechaStr + ' ' + hora(slot), franjaTexto: hora(slot) + ' - ' + hora(Math.min(slot + cfg.frecuenciaMin, cfg.horaFin * 60)),
+    horaPad: hora(slot), enHorario: (!cfg.soloLunesAViernes || diaNum <= 5) && total >= inicio && total < cfg.horaFin * 60,
+    diaNombre: DIAS_SEMANA[diaNum % 7], diaNum, fechaStr, minutosDemora: total - slot, cfg };
 }
 
 function buscarEstadoSlot(slotId) {
@@ -259,7 +210,8 @@ function buscarEstadoSlot(slotId) {
     const rowResponsable = String(filas[i][6]).trim();
     const rowEmail = String(filas[i][7]).trim();
 
-    if ((rowFecha + ' ' + rowTurno).indexOf(slotId) !== -1 || (rowTurno.indexOf(slotId.split(' ')[1]) !== -1 && rowFecha === slotId.split(' ')[0])) {
+    const inicioTurno = rowTurno.match(/^(?:\d{4}-\d{2}-\d{2}\s+)?(\d{2}:\d{2})/);
+    if (inicioTurno && rowFecha + ' ' + inicioTurno[1] === slotId) {
       return {
         completado: true,
         fecha: rowFecha,
@@ -300,234 +252,84 @@ function actualizarMatrizSemanal(franjaTexto, diaNum, nombre, hora) {
   }
 }
 
-/**
- * Endpoint GET: Estado en tiempo real y configuración activa
- */
-function doGet(e) {
-  try {
-    const ahora = new Date();
-    const info = calcularIntervaloActual(ahora);
-    const estadoSheet = buscarEstadoSlot(info.slotId);
-
-    let fase = 'PENDIENTE';
-    let atendidoPor = null;
-    let correoAtendiendo = null;
-    let horaInicioAtencion = null;
-    let revisadoPor = null;
-    let correo = null;
-    let horaRevision = null;
-
-    if (estadoSheet.completado) {
-      fase = 'COMPLETADO';
-      revisadoPor = estadoSheet.revisadoPor;
-      correo = estadoSheet.correo;
-      horaRevision = estadoSheet.horaFin || estadoSheet.horaInicio;
-    } else {
-      const props = PropertiesService.getScriptProperties();
-      const rawEnProceso = props.getProperty('EN_PROCESO_' + info.slotId);
-      if (rawEnProceso) {
-        try {
-          const parsed = JSON.parse(rawEnProceso);
-          fase = 'EN_PROCESO';
-          atendidoPor = parsed.nombre;
-          correoAtendiendo = parsed.correo;
-          horaInicioAtencion = parsed.horaInicio;
-        } catch (err) {}
-      }
-    }
-
-    const sheet = obtenerHojaRegistro();
-    const ultFila = sheet.getLastRow();
-    const ultimosLogs = [];
-
-    if (ultFila >= 5) {
-      const cantidad = Math.min(15, ultFila - 4);
-      const inicio = ultFila - cantidad + 1;
-      const datos = sheet.getRange(inicio, 1, cantidad, 10).getValues();
-
-      for (let i = datos.length - 1; i >= 0; i--) {
-        const fStr = extraerFechaLimpia(datos[i][1], info.cfg.timezone);
-        const hInicio = extraerHoraLimpia(datos[i][4], info.cfg.timezone);
-        const hFin = extraerHoraLimpia(datos[i][5], info.cfg.timezone);
-        ultimosLogs.push({
-          id: datos[i][0],
-          fecha: fStr,
-          dia: String(datos[i][2]),
-          turno: String(datos[i][3]),
-          horaInicio: hInicio,
-          horaFin: hFin,
-          nombre: String(datos[i][6]),
-          correo: String(datos[i][7]),
-          demora: String(datos[i][8]),
-          estado: String(datos[i][9])
-        });
-      }
-    }
-
-    const respuesta = {
-      ok: true,
-      enHorario: info.enHorario,
-      turnoActual: info.slotId,
-      horaTurno: info.franjaTexto,
-      diaSemana: info.diaNombre,
-      fase: fase,
-      atendidoPor: atendidoPor,
-      correoAtendiendo: correoAtendiendo,
-      horaInicioAtencion: horaInicioAtencion,
-      revisado: fase === 'COMPLETADO',
-      revisadoPor: revisadoPor,
-      correo: correo,
-      horaRevision: horaRevision,
-      configuracion: {
-        horaInicio: info.cfg.horaInicio,
-        horaFin: info.cfg.horaFin,
-        frecuenciaMin: info.cfg.frecuenciaMin,
-        diasConservar: info.cfg.diasConservar
-      },
-      ultimosLogs: ultimosLogs,
-      servidorHora: Utilities.formatDate(ahora, info.cfg.timezone, 'yyyy-MM-dd HH:mm:ss')
-    };
-
-    return ContentService.createTextOutput(JSON.stringify(respuesta))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: error.message }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
+// La planilla es la fuente de verdad: se escribe al iniciar y se actualiza al terminar.
+function respuestaJSON(datos) {
+  return ContentService.createTextOutput(JSON.stringify(datos)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/**
- * Endpoint POST: Registro de acciones
- */
+function leerRevisiones(cfg) {
+  const sheet = obtenerHojaRegistro();
+  const count = sheet.getLastRow() - 4;
+  if (count <= 0) return [];
+  return sheet.getRange(5, 1, count, 12).getValues().map((r, i) => ({
+    fila: i + 5, id: r[0], fecha: extraerFechaLimpia(r[1], cfg.timezone), dia: String(r[2]), turno: String(r[3]),
+    horaInicio: extraerHoraLimpia(r[4], cfg.timezone), horaFin: extraerHoraLimpia(r[5], cfg.timezone),
+    nombre: String(r[6]), correo: String(r[7]), demora: r[8], estado: String(r[9]),
+    revisionId: String(r[10] || ''), inicioISO: esFecha(r[11]) ? r[11].toISOString() : String(r[11] || '')
+  })).filter(r => r.id);
+}
+
+function inicioMilisegundos(r) {
+  return Date.parse(r.inicioISO || r.fecha + 'T' + r.horaInicio + '-03:00');
+}
+
+function obtenerEstado(ahora) {
+  const info = calcularIntervaloActual(ahora);
+  const registros = leerRevisiones(info.cfg);
+  const finalizadas = registros.filter(r => r.horaFin);
+  const ultima = finalizadas.slice().sort((a,b) => inicioMilisegundos(b) - inicioMilisegundos(a))[0];
+  const siguiente = ultima ? inicioMilisegundos(ultima) + info.cfg.frecuenciaMin * 60000 : NaN;
+  const cubierta = Number.isFinite(siguiente) && ahora.getTime() < siguiente;
+  return { ok:true, version:'2026-11-16.3', modo:'UN_CLIC', enHorario:info.enHorario,
+    turnoActual: cubierta ? ultima.revisionId || String(ultima.id) : 'PENDIENTE_' + info.fechaStr + '_' + (ultima ? ultima.id : 'inicial'),
+    horaTurno: cubierta ? ultima.turno : info.franjaTexto, diaSemana:info.diaNombre,
+    fase: cubierta ? 'COMPLETADO' : 'PENDIENTE', revisado:cubierta,
+    revisadoPor:ultima ? ultima.nombre : null, correo:ultima ? ultima.correo : null,
+    horaRevision:ultima ? ultima.horaFin : null, ultimaRevisionId:ultima ? ultima.revisionId || String(ultima.id) : null,
+    proximaRevision:Number.isFinite(siguiente) ? Utilities.formatDate(new Date(siguiente),info.cfg.timezone,'yyyy-MM-dd HH:mm:ss') : null,
+    proximaRevisionMs:Number.isFinite(siguiente) ? siguiente : null,
+    puedeRegistrar:info.enHorario, configuracion:info.cfg,
+    sheetsUrl:obtenerSpreadsheetRegistro().getUrl(), spreadsheetId:obtenerSpreadsheetRegistro().getId(),
+    ultimosLogs:registros.slice(-15).reverse(), servidorHora:Utilities.formatDate(ahora,info.cfg.timezone,'yyyy-MM-dd HH:mm:ss') };
+}
+
+function doGet(e) {
+  try { return respuestaJSON(obtenerEstado(new Date())); }
+  catch (error) { return respuestaJSON({ok:false,error:error.message}); }
+}
+
+function escribirRevision(sheet, fila, valores) {
+  sheet.getRange(4,11,1,2).setValues([['ID Revision','Inicio ISO']]);
+  sheet.getRange(fila,2).setNumberFormat('@');
+  sheet.getRange(fila,5,1,2).setNumberFormat('@');
+  sheet.getRange(fila,11,1,2).setNumberFormat('@');
+  sheet.getRange(fila,1,1,12).setValues([valores]);
+  SpreadsheetApp.flush();
+}
+
 function doPost(e) {
   const lock = LockService.getScriptLock();
+  let bloqueado = false;
   try {
-    lock.waitLock(10000);
-
-    let datos = {};
-    if (e && e.postData && e.postData.contents) {
-      try {
-        datos = JSON.parse(e.postData.contents);
-      } catch (err) {
-        datos = e.parameter || {};
-      }
-    } else if (e && e.parameter) {
-      datos = e.parameter;
-    }
-
-    const accion = datos.action || 'checkin';
+    lock.waitLock(10000); bloqueado = true;
+    const datos = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : (e && e.parameter || {});
+    if (datos.action !== 'registrar_revision') throw new Error('Actualiza la extension o la app para usar el registro con un solo clic.');
+    const nombre = String(datos.nombre || '').trim();
+    const correo = String(datos.correo || '').trim();
+    const requestId = String(datos.requestId || '').trim();
+    if (!nombre) throw new Error('Configura tu nombre antes de registrar la revision');
+    if (!/^[a-zA-Z0-9_-]{8,100}$/.test(requestId)) throw new Error('Falta el identificador de la revision. Actualiza la aplicacion.');
     const ahora = new Date();
     const info = calcularIntervaloActual(ahora);
-    const props = PropertiesService.getScriptProperties();
-    const keyEnProceso = 'EN_PROCESO_' + info.slotId;
-
-    const estadoPrevio = buscarEstadoSlot(info.slotId);
-    if (estadoPrevio.completado) {
-      return ContentService.createTextOutput(JSON.stringify({
-        ok: true,
-        yaCompletado: true,
-        revisadoPor: estadoPrevio.revisadoPor,
-        horaRevision: estadoPrevio.horaFin,
-        mensaje: 'Este turno ya fue completado por ' + estadoPrevio.revisadoPor
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // PASO 1: Tomar revisión
-    if (accion === 'tomar_revision') {
-      const nombre = (datos.nombre || datos.name || 'Anónimo').trim();
-      const correo = (datos.correo || datos.email || 'Sin correo').trim();
-
-      const rawActual = props.getProperty(keyEnProceso);
-      if (rawActual) {
-        try {
-          const act = JSON.parse(rawActual);
-          return ContentService.createTextOutput(JSON.stringify({
-            ok: true,
-            yaTomadoPorOtro: true,
-            atendidoPor: act.nombre,
-            correoAtendiendo: act.correo,
-            horaInicioAtencion: act.horaInicio,
-            mensaje: act.nombre + ' ya está revisando este turno'
-          })).setMimeType(ContentService.MimeType.JSON);
-        } catch (err) {}
-      }
-
-      const horaInicioStr = Utilities.formatDate(ahora, info.cfg.timezone, 'HH:mm:ss');
-      props.setProperty(keyEnProceso, JSON.stringify({
-        nombre: nombre,
-        correo: correo,
-        horaInicio: horaInicioStr
-      }));
-
-      return ContentService.createTextOutput(JSON.stringify({
-        ok: true,
-        fase: 'EN_PROCESO',
-        atendidoPor: nombre,
-        correoAtendiendo: correo,
-        horaInicioAtencion: horaInicioStr,
-        mensaje: nombre + ' comenzó a revisar WhatsApp'
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // PASO 2: Finalizar revisión
-    if (accion === 'finalizar_revision' || accion === 'checkin') {
-      const rawActual = props.getProperty(keyEnProceso);
-      let nombre = (datos.nombre || datos.name || 'Anónimo').trim();
-      let correo = (datos.correo || datos.email || 'Sin correo').trim();
-      let horaInicioStr = Utilities.formatDate(ahora, info.cfg.timezone, 'HH:mm:ss');
-
-      if (rawActual) {
-        try {
-          const act = JSON.parse(rawActual);
-          if (act.nombre) nombre = act.nombre;
-          if (act.correo) correo = act.correo;
-          if (act.horaInicio) horaInicioStr = act.horaInicio;
-        } catch (err) {}
-      }
-
-      const horaFinStr = Utilities.formatDate(ahora, info.cfg.timezone, 'HH:mm:ss');
-      const sheet = obtenerHojaRegistro();
-      const ultFila = sheet.getLastRow();
-      const nuevoId = ultFila >= 5 ? (ultFila - 4 + 1) : 1;
-      const estadoTexto = info.minutosDemora <= 5 ? '✅ A tiempo' : '⚠️ Con demora';
-
-      sheet.appendRow([
-        nuevoId,
-        info.fechaStr,
-        info.diaNombre,
-        info.franjaTexto,
-        horaInicioStr,
-        horaFinStr,
-        nombre,
-        correo,
-        info.minutosDemora,
-        estadoTexto
-      ]);
-
-      actualizarMatrizSemanal(info.franjaTexto, info.diaNum, nombre, horaFinStr);
-      props.deleteProperty(keyEnProceso);
-      purgarRegistrosAntiguos(sheet);
-
-      return ContentService.createTextOutput(JSON.stringify({
-        ok: true,
-        fase: 'COMPLETADO',
-        revisadoPor: nombre,
-        correo: correo,
-        horaInicio: horaInicioStr,
-        horaRevision: horaFinStr,
-        turno: info.franjaTexto,
-        mensaje: '¡Revisión completada y guardada en Excel!'
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'Acción desconocida' }))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: error.message }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } finally {
-    lock.releaseLock();
-  }
+    const registros = leerRevisiones(info.cfg);
+    // Un reintento de red del mismo clic no debe agregar otra fila ni mover el aviso.
+    if (registros.some(r => r.revisionId === requestId)) return respuestaJSON({...obtenerEstado(ahora),yaRegistrado:true});
+    if (!info.enHorario) throw new Error('Fuera del horario configurado');
+    const hora = Utilities.formatDate(ahora,info.cfg.timezone,'HH:mm:ss');
+    const id = registros.reduce((m,r)=>Math.max(m,Number(r.id)||0),0)+1;
+    const sheet = obtenerHojaRegistro();
+    escribirRevision(sheet,Math.max(5,sheet.getLastRow()+1),[id,info.fechaStr,info.diaNombre,hora.slice(0,5),hora,hora,nombre,correo,info.minutosDemora,'COMPLETADO',requestId,ahora.toISOString()]);
+    return respuestaJSON(obtenerEstado(ahora));
+  } catch(error) { return respuestaJSON({ok:false,error:error.message}); }
+  finally { if (bloqueado) lock.releaseLock(); }
 }

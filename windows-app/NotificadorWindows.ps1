@@ -3,6 +3,9 @@
 # Funciona en 100% de PCs con Windows 10 y 11 sin instalar nada extra.
 # ==============================================================================
 
+$script:instanciaMutex = New-Object System.Threading.Mutex($false, 'Local\NotificadorWSP')
+if (!$script:instanciaMutex.WaitOne(0, $false)) { exit }
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -81,6 +84,8 @@ $menuItemConfig = $contextMenu.Items.Add("👤 Configurar Nombre y Datos")
 $menuItemSheets = $contextMenu.Items.Add("📊 Abrir Excel en Drive")
 $menuItemWsp = $contextMenu.Items.Add("💬 Abrir WhatsApp Web")
 $contextMenu.Items.Add("-") | Out-Null
+$menuItemManual = $contextMenu.Items.Add("Ya revise WhatsApp")
+$menuItemManual.Add_Click({ Ejecutar-Accion "registrar_revision" })
 $menuItemVerificar = $contextMenu.Items.Add("🔄 Verificar Turno Ahora")
 $menuItemSalir = $contextMenu.Items.Add("❌ Salir")
 
@@ -90,6 +95,14 @@ $notifyIcon.ContextMenuStrip = $contextMenu
 $script:ultimoEstado = $null
 $script:ventanaAlerta = $null
 $script:alertaCerrandose = $false
+$script:ultimoTurnoNotificado = ""
+$script:consultando = $false
+$script:ultimoAvisoEquipo = ""
+$script:ultimoPreaviso = ""
+$script:accionEnCurso = $false
+$script:registroPendiente = $null
+$script:cerrarAlertaTimer = New-Object System.Windows.Forms.Timer
+$script:cerrarAlertaTimer.Add_Tick({ $script:cerrarAlertaTimer.Stop(); Cerrar-Alerta })
 
 # Función para abrir la ventana de configuración
 function Mostrar-VentanaConfiguracion {
@@ -221,13 +234,13 @@ function Mostrar-VentanaAlerta($estado) {
     $lblClose.ForeColor = [System.Drawing.Color]::White
     $lblClose.Location = New-Object System.Drawing.Point(335, 8)
     $lblClose.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $lblClose.Add_Click({ $form.Close() })
+    $lblClose.Add_Click({ Cerrar-Alerta })
     $header.Controls.Add($lblClose)
 
     # Cuerpo
     $lblDesc = New-Object System.Windows.Forms.Label
     $lblDesc.Name = "lblDesc"
-    $lblDesc.Text = "Turno $($estado.horaTurno) pendiente.`nToca 'Responder notificación' para atenderlo."
+    $lblDesc.Text = "Revisa los mensajes y toca Ya revise WhatsApp para registrar."
     $lblDesc.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $lblDesc.ForeColor = [System.Drawing.Color]::FromArgb(31, 41, 55)
     $lblDesc.Location = New-Object System.Drawing.Point(14, 46)
@@ -237,7 +250,7 @@ function Mostrar-VentanaAlerta($estado) {
     # Botón Principal
     $btnAccion = New-Object System.Windows.Forms.Button
     $btnAccion.Name = "btnAccion"
-    $btnAccion.Text = "🙋 Responder notificación"
+    $btnAccion.Text = "Ya revise WhatsApp"
     $btnAccion.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $btnAccion.BackColor = [System.Drawing.Color]::FromArgb(239, 68, 68)
     $btnAccion.ForeColor = [System.Drawing.Color]::White
@@ -246,16 +259,12 @@ function Mostrar-VentanaAlerta($estado) {
     $btnAccion.Size = New-Object System.Drawing.Size(330, 40)
     $btnAccion.Cursor = [System.Windows.Forms.Cursors]::Hand
 
+    $btnAccion.Text = "Ya revise WhatsApp"
     $btnAccion.Add_Click({
-        if ($script:ultimoEstado.fase -eq "PENDIENTE") {
-            $btnAccion.Text = "Avisando al equipo..."
-            $btnAccion.Enabled = $false
-            Ejecutar-Accion "tomar_revision"
-        } elseif ($script:ultimoEstado.fase -eq "EN_PROCESO") {
-            $btnAccion.Text = "Guardando en Excel..."
-            $btnAccion.Enabled = $false
-            Ejecutar-Accion "finalizar_revision"
-        }
+        param($sender, $eventArgs)
+        $sender.Text = "Guardando revision..."
+        $sender.Enabled = $false
+        Ejecutar-Accion "registrar_revision"
     })
     $panelBorder.Controls.Add($btnAccion)
 
@@ -275,43 +284,20 @@ function Mostrar-VentanaAlerta($estado) {
     [System.Media.SystemSounds]::Asterisk.Play()
 
     $form.Show()
+    Actualizar-ContenidoAlerta $estado
 }
 
 function Actualizar-ContenidoAlerta($estado) {
     if ($null -eq $script:ventanaAlerta -or $script:ventanaAlerta.IsDisposed) { return }
-
     $lblDesc = $script:ventanaAlerta.Controls[0].Controls["lblDesc"]
-    $btnAccion = $script:ventanaAlerta.Controls[0].Controls["btnAccion"]
-
-    $miNombre = ($config.userName).Trim().ToLower()
-    $soyYo = ($estado.atendidoPor -and $estado.atendidoPor.Trim().ToLower() -eq $miNombre)
-
-    if ($estado.fase -eq "EN_PROCESO") {
-        if ($soyYo) {
-            $lblDesc.Text = "👀 Estás revisando WhatsApp.`nToca el botón al terminar para registrar en el Excel."
-            $btnAccion.Text = "✅ Terminé de revisar"
-            $btnAccion.BackColor = [System.Drawing.Color]::FromArgb(37, 211, 102)
-            $btnAccion.Enabled = $true
-        } else {
-            $lblDesc.Text = "🟡 $($estado.atendidoPor) estará revisando WhatsApp.`nEsta alerta se cerrará en instantes."
-            $btnAccion.Visible = $false
-            # Auto-cerrar en 6 segundos
-            Start-Sleep -Seconds 6
-            if ($script:ventanaAlerta -and !$script:ventanaAlerta.IsDisposed) {
-                $script:ventanaAlerta.Close()
-            }
-        }
-    } elseif ($estado.fase -eq "COMPLETADO") {
-        $lblDesc.Text = "🟢 Turno completado por $($estado.revisadoPor)."
-        $btnAccion.Visible = $false
-        Start-Sleep -Seconds 4
-        if ($script:ventanaAlerta -and !$script:ventanaAlerta.IsDisposed) {
-            $script:ventanaAlerta.Close()
-        }
-    }
+    $btn = $script:ventanaAlerta.Controls[0].Controls["btnAccion"]
+    $lblDesc.Text = "Revisa los mensajes y registra con un clic.`nLa proxima alerta se cuenta desde ese registro."
+    $btn.Text = "Ya revise WhatsApp"
+    $btn.Enabled = !$script:accionEnCurso
 }
 
 function Cerrar-Alerta {
+    $script:cerrarAlertaTimer.Stop()
     if ($null -ne $script:ventanaAlerta -and !$script:ventanaAlerta.IsDisposed) {
         $script:ventanaAlerta.Close()
         $script:ventanaAlerta = $null
@@ -326,13 +312,32 @@ function Consultar-Estado {
         return
     }
 
+    if ($script:consultando) { return }
+    $script:consultando = $true
     try {
         $url = "$($config.scriptUrl)?action=status&t=" + [DateTimeOffset]::Now.ToUnixTimeMilliseconds()
         $resp = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10
 
-        if (!$resp.ok) { return }
+        if (!$resp.ok) { throw "Error del servidor: $($resp.error)" }
 
         $script:ultimoEstado = $resp
+        $claveAviso = "$($resp.turnoActual)|$($resp.fase)|$($resp.atendidoPor)|$($resp.revisadoPor)"
+        if ($resp.enHorario -and $script:ultimoAvisoEquipo -ne $claveAviso) {
+            $script:ultimoAvisoEquipo = $claveAviso
+            if ($resp.fase -eq 'COMPLETADO') {
+                $notifyIcon.ShowBalloonTip(6000, 'WhatsApp revisado', "Revisado por $($resp.revisadoPor) a las $($resp.horaRevision). Proximo aviso: $($resp.proximaRevision)", [System.Windows.Forms.ToolTipIcon]::Info)
+            }
+        }
+        $restante = [double]$resp.proximaRevisionMs - [DateTimeOffset]::Now.ToUnixTimeMilliseconds()
+        if ($resp.enHorario -and $resp.fase -eq 'COMPLETADO' -and $restante -gt 0 -and $restante -le 600000) {
+            $clavePreaviso = [string]$resp.proximaRevisionMs
+            if ($script:ultimoPreaviso -ne $clavePreaviso) {
+                $script:ultimoPreaviso = $clavePreaviso
+                $minutos = [Math]::Ceiling($restante / 60000)
+                $notifyIcon.ShowBalloonTip(6000, 'Proxima revision de WhatsApp', "En $minutos minutos hay que revisar WhatsApp.", [System.Windows.Forms.ToolTipIcon]::Info)
+            }
+        }
+        if ($resp.sheetsUrl) { $config.sheetsUrl = $resp.sheetsUrl }
 
         if (!$resp.enHorario) {
             $notifyIcon.Text = "Notificador WhatsApp (Fuera de horario 8-18hs)"
@@ -345,41 +350,55 @@ function Consultar-Estado {
         $menuItemEstado.Text = "🟢 Servicio: En Línea"
 
         if ($resp.fase -eq "PENDIENTE") {
-            Mostrar-VentanaAlerta $resp
-        } elseif ($resp.fase -eq "EN_PROCESO") {
-            if ($null -ne $script:ventanaAlerta -and !$script:ventanaAlerta.IsDisposed) {
-                Actualizar-ContenidoAlerta $resp
+            if ($script:ultimoTurnoNotificado -ne $resp.turnoActual) {
+                Cerrar-Alerta
+                $script:ultimoTurnoNotificado = $resp.turnoActual
+                Mostrar-VentanaAlerta $resp
             }
         } elseif ($resp.fase -eq "COMPLETADO") {
             Cerrar-Alerta
         }
 
     } catch {
-        # Error silencioso de red / offline
+        $menuItemEstado.Text = "Error de conexion: $($_.Exception.Message)"
+    } finally {
+        $script:consultando = $false
     }
 }
 
 function Ejecutar-Accion($accion) {
+    if ($script:accionEnCurso) { return }
     if ([string]::IsNullOrWhiteSpace($config.userName)) {
         Mostrar-VentanaConfiguracion
-        return
+        if ([string]::IsNullOrWhiteSpace($config.userName)) {
+            Actualizar-ContenidoAlerta $script:ultimoEstado
+            return
+        }
     }
 
+    $script:accionEnCurso = $true
     try {
-        $body = @{
-            action = $accion
-            nombre = $config.userName
-            correo = $config.userEmail
-            slotId = $script:ultimoEstado.turnoActual
-        } | ConvertTo-Json
-
-        $resp = Invoke-RestMethod -Uri $config.scriptUrl -Method Post -Body $body -ContentType "text/plain;charset=utf-8" -TimeoutSec 10
-
-        if ($resp.ok) {
-            Consultar-Estado
+        if ($null -eq $script:registroPendiente) {
+            $script:registroPendiente = @{
+                action = 'registrar_revision'
+                nombre = $config.userName
+                correo = $config.userEmail
+                requestId = [Guid]::NewGuid().ToString()
+            }
         }
+        $body = $script:registroPendiente | ConvertTo-Json
+
+        $resp = Invoke-RestMethod -Uri $config.scriptUrl -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -ContentType "text/plain;charset=utf-8" -TimeoutSec 10
+
+        if (!$resp.ok) { throw "El servidor no guardo la revision: $($resp.error)" }
+        $script:registroPendiente = $null
+        $script:ultimoEstado = $resp
+        Consultar-Estado
     } catch {
         [System.Windows.Forms.MessageBox]::Show("Error de conexión al guardar en Excel.", "Aviso", "OK", "Error")
+    } finally {
+        $script:accionEnCurso = $false
+        Actualizar-ContenidoAlerta $script:ultimoEstado
     }
 }
 
@@ -418,7 +437,7 @@ $notifyIcon.Add_DoubleClick({
 
 # Timer periódico (cada 25 segundos)
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 25000
+$timer.Interval = 10000
 $timer.Add_Tick({ Consultar-Estado })
 $timer.Start()
 

@@ -6,9 +6,24 @@
 const ALARM_NAME = 'wsp_check_alarm';
 const FAST_POLL_ALARM = 'wsp_fast_poll_alarm';
 const NOTIFICATION_ID = 'wsp_review_alert';
+const PREAVISO_ALARM = 'wsp_preaviso';
+const PREAVISO_NOTIFICATION = 'wsp_preaviso_alert';
 
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbziC1cvnny7cw_vgvinHD1-6G0VIRmjgGyDTCjp-MevQGcC6wBQkanDyUOJ14NvpmAujw/exec';
 const DEFAULT_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/1aFwQR-S6jEgBvFk9rNBySj8CGbpckWzZotzDqRUs6AA/edit';
+
+let consultaEnCurso = false;
+let accionEnCurso = false;
+let ultimaNotificacion = '';
+
+async function notificarCambio(data, mostrar) {
+  const clave = [data.turnoActual, data.fase, data.atendidoPor || '', data.revisadoPor || ''].join('|');
+  const previo = await chrome.storage.local.get(['ultimaNotificacion']);
+  if (clave === ultimaNotificacion || clave === previo.ultimaNotificacion) return;
+  ultimaNotificacion = clave;
+  await chrome.storage.local.set({ ultimaNotificacion: clave });
+  mostrar();
+}
 
 let ultimoEstado = {
   ok: true,
@@ -96,6 +111,10 @@ async function verificarEstadoBadge() {
     chrome.action.setBadgeBackgroundColor({ color: '#6b7280' });
     chrome.alarms.clear(ALARM_NAME);
     chrome.alarms.clear(FAST_POLL_ALARM);
+    chrome.alarms.clear('wsp_proxima_revision');
+    chrome.alarms.clear(PREAVISO_ALARM);
+    chrome.notifications.clear(PREAVISO_NOTIFICATION);
+    chrome.notifications.clear(NOTIFICATION_ID);
     return;
   }
 
@@ -112,7 +131,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   const config = await obtenerConfig();
   if (!config.servicioActivo) return;
 
-  if (alarm.name === ALARM_NAME || alarm.name === FAST_POLL_ALARM) {
+  if (alarm.name === ALARM_NAME || alarm.name === FAST_POLL_ALARM || alarm.name === 'wsp_proxima_revision' || alarm.name === PREAVISO_ALARM) {
     verificarEstado();
   }
 });
@@ -131,14 +150,17 @@ async function verificarEstado() {
     return;
   }
 
+  if (consultaEnCurso) return;
+  consultaEnCurso = true;
   try {
     const url = `${config.scriptUrl}?action=status&t=${Date.now()}`;
     const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
     const data = await resp.json();
 
-    if (!data.ok) return;
+    if (accionEnCurso) return;
+    if (!data.ok) throw new Error(data.error || 'El servidor no respondio correctamente');
+    if (data.sheetsUrl) await chrome.storage.local.set({sheetsUrl:data.sheetsUrl});
 
-    const estadoAnterior = { ...ultimoEstado };
     ultimoEstado = data;
 
     difundirEstadoATabs(data);
@@ -147,95 +169,70 @@ async function verificarEstado() {
       chrome.action.setBadgeText({ text: '🌙' });
       chrome.action.setBadgeBackgroundColor({ color: '#4b5563' });
       chrome.alarms.clear(FAST_POLL_ALARM);
+      chrome.alarms.clear(PREAVISO_ALARM);
+      chrome.notifications.clear(PREAVISO_NOTIFICATION);
       return;
     }
 
-    const miNombre = (config.userName || '').trim().toLowerCase();
-    const soyYoQuienAtiende = data.atendidoPor && data.atendidoPor.toLowerCase() === miNombre;
-
-    // FASE 1: PENDIENTE
     if (data.fase === 'PENDIENTE') {
-      chrome.action.setBadgeText({ text: '30m' });
-      chrome.action.setBadgeBackgroundColor({ color: '#dc2626' });
-
-      mostrarNotificacionPendiente(data.horaTurno);
-      chrome.alarms.create(FAST_POLL_ALARM, { periodInMinutes: 0.25 });
-      return;
-    }
-
-    // FASE 2: EN PROCESO
-    if (data.fase === 'EN_PROCESO') {
-      chrome.alarms.create(FAST_POLL_ALARM, { periodInMinutes: 0.25 });
-
-      if (soyYoQuienAtiende) {
-        chrome.action.setBadgeText({ text: 'REV' });
-        chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });
-        mostrarNotificacionEnProcesoPropia();
-      } else {
-        chrome.action.setBadgeText({ text: 'WSP' });
-        chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' });
-        mostrarNotificacionEnProcesoOtros(data.atendidoPor);
-      }
-      return;
-    }
-
-    // FASE 3: COMPLETADO
-    if (data.fase === 'COMPLETADO') {
+      chrome.action.setBadgeText({text:'WSP'});
+      chrome.action.setBadgeBackgroundColor({color:'#dc2626'});
+      await notificarCambio(data, mostrarNotificacionPendiente);
+      chrome.alarms.create(FAST_POLL_ALARM,{periodInMinutes:0.5});
+    } else {
       chrome.alarms.clear(FAST_POLL_ALARM);
-
-      if (estadoAnterior.fase !== 'COMPLETADO') {
-        mostrarNotificacionFinalizado(data.revisadoPor, data.horaRevision);
-      }
-
-      chrome.action.setBadgeText({ text: 'OK' });
-      chrome.action.setBadgeBackgroundColor({ color: '#16a34a' });
+      chrome.action.setBadgeText({text:'OK'});
+      chrome.action.setBadgeBackgroundColor({color:'#16a34a'});
+      await notificarCambio(data, () => mostrarNotificacionFinalizado(data.revisadoPor,data.horaRevision));
     }
-
-  } catch (err) {
-    console.error('[NotificadorWSP] Error de conexión:', err);
+    programarProximoAviso(data);
+    await notificarPreaviso(data);
+  } catch(err) {
+    console.error('[NotificadorWSP] Error de conexion:',err);
+  } finally {
+    consultaEnCurso = false;
   }
 }
 
-function mostrarNotificacionPendiente(horaTurno) {
-  chrome.notifications.create(NOTIFICATION_ID, {
-    type: 'basic',
-    iconUrl: 'icons/icon-128.png',
-    title: '🔔 ¡Hora de revisar WhatsApp!',
-    message: `Turno ${horaTurno || 'actual'} pendiente. Toca 'Responder notificación' para atenderlo.`,
-    priority: 2,
-    requireInteraction: true,
-    buttons: [
-      { title: '🙋 Responder notificación' }
-    ]
-  });
+function programarProximoAviso(data) {
+  const restante = data.proximaRevisionMs - Date.now();
+  if (restante > 0) {
+    chrome.alarms.create('wsp_proxima_revision', {when: data.proximaRevisionMs});
+  } else {
+    chrome.alarms.clear('wsp_proxima_revision');
+  }
+  if (data.enHorario && restante > 10 * 60000) {
+    chrome.alarms.create(PREAVISO_ALARM, {when: data.proximaRevisionMs - 10 * 60000});
+    chrome.notifications.clear(PREAVISO_NOTIFICATION);
+  } else {
+    chrome.alarms.clear(PREAVISO_ALARM);
+    if (restante <= 0) chrome.notifications.clear(PREAVISO_NOTIFICATION);
+  }
 }
 
-function mostrarNotificacionEnProcesoPropia() {
-  chrome.notifications.create(NOTIFICATION_ID, {
+async function notificarPreaviso(data) {
+  const restante = data.proximaRevisionMs - Date.now();
+  if (!data.enHorario || data.fase !== 'COMPLETADO' || restante <= 0 || restante > 10 * 60000) return;
+  const clave = String(data.proximaRevisionMs);
+  const guardado = await chrome.storage.local.get(['ultimoPreaviso']);
+  if (guardado.ultimoPreaviso === clave) return;
+  await chrome.storage.local.set({ultimoPreaviso: clave});
+  const minutos = Math.ceil(restante / 60000);
+  chrome.notifications.create(PREAVISO_NOTIFICATION, {
     type: 'basic',
     iconUrl: 'icons/icon-128.png',
-    title: '👀 Revisando WhatsApp...',
-    message: 'Presiona el botón al terminar de revisar para asentar en el Excel.',
-    priority: 2,
-    requireInteraction: true,
-    buttons: [
-      { title: '✅ Terminé de revisar' }
-    ]
-  });
-}
-
-function mostrarNotificacionEnProcesoOtros(nombre) {
-  chrome.notifications.create(NOTIFICATION_ID, {
-    type: 'basic',
-    iconUrl: 'icons/icon-128.png',
-    title: '🟡 Revisión en curso',
-    message: `${nombre} estará revisando WhatsApp.`,
+    title: 'Proxima revision de WhatsApp',
+    message: `En ${minutos} minutos hay que revisar WhatsApp.`,
     priority: 1
   });
+}
 
-  setTimeout(() => {
-    chrome.notifications.clear(NOTIFICATION_ID);
-  }, 6000);
+function mostrarNotificacionPendiente() {
+  chrome.notifications.create(NOTIFICATION_ID, {
+    type:'basic',iconUrl:'icons/icon-128.png',title:'Hora de revisar WhatsApp',
+    message:'Revisa los mensajes y toca "Ya revise WhatsApp" para registrarlo.',
+    priority:2,requireInteraction:true,buttons:[{title:'Ya revise WhatsApp'}]
+  });
 }
 
 function mostrarNotificacionFinalizado(nombre, hora) {
@@ -243,7 +240,7 @@ function mostrarNotificacionFinalizado(nombre, hora) {
     type: 'basic',
     iconUrl: 'icons/icon-128.png',
     title: '🟢 WhatsApp revisado',
-    message: `Turno finalizado por ${nombre} a las ${hora} hs.`,
+    message: `Revisado por ${nombre} a las ${hora}.`,
     priority: 1
   });
 
@@ -252,14 +249,10 @@ function mostrarNotificacionFinalizado(nombre, hora) {
   }, 5000);
 }
 
-chrome.notifications.onButtonClicked.addListener(async (notifId, btnIdx) => {
-  if (notifId === NOTIFICATION_ID) {
-    if (ultimoEstado.fase === 'PENDIENTE') {
-      await tomarRevision();
-    } else if (ultimoEstado.fase === 'EN_PROCESO') {
-      await finalizarRevision();
-    }
-  }
+chrome.notifications.onButtonClicked.addListener(async (notifId) => {
+  if (notifId !== NOTIFICATION_ID) return;
+  const res = await registrarRevision();
+  if (!res.ok) mostrarErrorAccion(res.error);
 });
 
 chrome.notifications.onClicked.addListener((notifId) => {
@@ -274,102 +267,36 @@ chrome.notifications.onClicked.addListener((notifId) => {
   }
 });
 
-async function tomarRevision(nombreParam, correoParam) {
-  const config = await obtenerConfig();
-  const nombre = nombreParam || config.userName;
-  const correo = correoParam || config.userEmail || 'Sin correo';
-
-  if (!nombre) {
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon-128.png',
-      title: '⚠️ Falta tu Nombre',
-      message: 'Abre la extensión y escribe tu Nombre y Apellido.'
-    });
-    return { ok: false, error: 'Sin nombre configurado' };
-  }
-
-  if (!config.scriptUrl) {
-    return { ok: false, error: 'Sin URL de Google Apps Script' };
-  }
-
+async function registrarRevision(nombreParam,correoParam) {
+  if (accionEnCurso) return {ok:false,error:'El registro se esta guardando.'};
+  accionEnCurso = true;
   try {
-    const resp = await fetch(config.scriptUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'tomar_revision',
-        nombre: nombre,
-        correo: correo,
-        slotId: ultimoEstado.turnoActual
-      })
-    });
-
-    const data = await resp.json();
-
-    if (data.ok) {
-      ultimoEstado.fase = 'EN_PROCESO';
-      ultimoEstado.atendidoPor = data.atendidoPor;
-      ultimoEstado.correoAtendiendo = data.correoAtendiendo;
-      ultimoEstado.horaInicioAtencion = data.horaInicioAtencion;
-
-      mostrarNotificacionEnProcesoPropia();
-      chrome.action.setBadgeText({ text: 'REV' });
-      chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' });
-
-      difundirEstadoATabs(ultimoEstado);
-      return { ok: true, data: data };
-    } else {
-      return { ok: false, error: data.error };
+    const cfg = await obtenerConfig();
+    const nombre = (nombreParam || cfg.userName).trim();
+    const correo = (correoParam || cfg.userEmail || '').trim();
+    if (!nombre) throw new Error('Primero guarda tu nombre en la extension.');
+    const pendientes = await chrome.storage.local.get(['registroPendiente']);
+    let registro = pendientes.registroPendiente;
+    if (!registro || registro.nombre !== nombre || registro.correo !== correo) {
+      registro = {action:'registrar_revision',nombre,correo,requestId:crypto.randomUUID()};
+      await chrome.storage.local.set({registroPendiente:registro});
     }
-  } catch (err) {
-    console.error('[NotificadorWSP] Error al tomar revisión:', err);
-    return { ok: false, error: err.message };
-  }
-}
-
-async function finalizarRevision(nombreParam, correoParam) {
-  const config = await obtenerConfig();
-  const nombre = nombreParam || config.userName;
-  const correo = correoParam || config.userEmail || 'Sin correo';
-
-  if (!config.scriptUrl) return { ok: false, error: 'Sin URL' };
-
-  try {
-    const resp = await fetch(config.scriptUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'finalizar_revision',
-        nombre: nombre,
-        correo: correo,
-        slotId: ultimoEstado.turnoActual
-      })
+    const resp = await fetch(cfg.scriptUrl,{
+      method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(registro)
     });
-
     const data = await resp.json();
-
-    if (data.ok) {
-      ultimoEstado.fase = 'COMPLETADO';
-      ultimoEstado.revisado = true;
-      ultimoEstado.revisadoPor = data.revisadoPor;
-      ultimoEstado.correo = data.correo;
-      ultimoEstado.horaRevision = data.horaRevision;
-
-      chrome.alarms.clear(FAST_POLL_ALARM);
-      chrome.action.setBadgeText({ text: 'OK' });
-      chrome.action.setBadgeBackgroundColor({ color: '#16a34a' });
-
-      mostrarNotificacionFinalizado(data.revisadoPor, data.horaRevision);
-      difundirEstadoATabs(ultimoEstado);
-      return { ok: true, data: data };
-    } else {
-      return { ok: false, error: data.error };
-    }
-  } catch (err) {
-    console.error('[NotificadorWSP] Error al finalizar:', err);
-    return { ok: false, error: err.message };
-  }
+    if (!data.ok) throw new Error(data.error || 'No se pudo guardar la revision');
+    await chrome.storage.local.remove('registroPendiente');
+    ultimoEstado = data;
+    chrome.notifications.clear(NOTIFICATION_ID);
+    chrome.action.setBadgeText({text:'OK'});
+    chrome.action.setBadgeBackgroundColor({color:'#16a34a'});
+    await notificarCambio(data,()=>mostrarNotificacionFinalizado(data.revisadoPor,data.horaRevision));
+    programarProximoAviso(data);
+    difundirEstadoATabs(data);
+    return {ok:true,data};
+  } catch(err) { return {ok:false,error:err.message}; }
+  finally { accionEnCurso = false; }
 }
 
 function difundirEstadoATabs(estado) {
@@ -387,9 +314,9 @@ function difundirEstadoATabs(estado) {
 
 chrome.runtime.onMessage.addListener((mensaje, sender, sendResponse) => {
   if (mensaje.tipo === 'GET_ESTADO') {
-    obtenerConfig().then((cfg) => {
+    obtenerConfig().then(async (cfg) => {
+      if (cfg.servicioActivo) await verificarEstado();
       sendResponse({ estado: ultimoEstado, config: cfg });
-      if (cfg.servicioActivo) verificarEstado();
     });
     return true;
   }
@@ -402,17 +329,8 @@ chrome.runtime.onMessage.addListener((mensaje, sender, sendResponse) => {
     return true;
   }
 
-  if (mensaje.tipo === 'TOMAR_REVISION') {
-    tomarRevision(mensaje.nombre, mensaje.correo).then((res) => {
-      sendResponse(res);
-    });
-    return true;
-  }
-
-  if (mensaje.tipo === 'FINALIZAR_REVISION') {
-    finalizarRevision(mensaje.nombre, mensaje.correo).then((res) => {
-      sendResponse(res);
-    });
+  if (mensaje.tipo === 'REGISTRAR_REVISION') {
+    registrarRevision(mensaje.nombre,mensaje.correo).then(sendResponse);
     return true;
   }
 
@@ -429,3 +347,10 @@ chrome.runtime.onMessage.addListener((mensaje, sender, sendResponse) => {
     return true;
   }
 });
+
+function mostrarErrorAccion(error) {
+  chrome.notifications.create('wsp_error_guardado', {
+    type:'basic', iconUrl:'icons/icon-128.png', title:'No se pudo registrar la revision',
+    message:error || 'Reintenta cuando se restablezca la conexion.', requireInteraction:true
+  });
+}

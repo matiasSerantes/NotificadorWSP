@@ -232,38 +232,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     actualizarTodo();
   });
 
-  // Botón Principal: Responder notificación / Terminé de revisar
-  btnRevisar.addEventListener('click', async () => {
+  // Registro con un solo clic
+  let guardando = false;
+  btnRevisar.addEventListener('click', () => {
+    if (guardando) return;
     const nombre = inputNombre.value.trim();
     const correo = inputCorreo.value.trim();
-
-    if (!nombre) {
-      alert('⚠️ Primero escribe tu Nombre y Apellido arriba.');
-      inputNombre.focus();
-      return;
-    }
-
-    if (faseActual === 'PENDIENTE') {
-      btnRevisar.disabled = true;
-      btnRevisar.innerText = 'Notificando al equipo...';
-
-      chrome.runtime.sendMessage({ tipo: 'TOMAR_REVISION', nombre, correo }, (res) => {
-        btnRevisar.disabled = false;
-        actualizarTodo();
-      });
-      return;
-    }
-
-    if (faseActual === 'EN_PROCESO') {
-      btnRevisar.disabled = true;
-      btnRevisar.innerText = 'Guardando en Excel...';
-
-      chrome.runtime.sendMessage({ tipo: 'FINALIZAR_REVISION', nombre, correo }, (res) => {
-        btnRevisar.disabled = false;
-        actualizarTodo();
-      });
-      return;
-    }
+    if (!nombre) { alert('Primero escribe tu nombre.'); inputNombre.focus(); return; }
+    guardando = true;
+    btnRevisar.disabled = true;
+    btnRevisar.innerText = 'Guardando revision...';
+    chrome.runtime.sendMessage({tipo:'REGISTRAR_REVISION',nombre,correo},res => {
+      guardando = false;
+      btnRevisar.disabled = false;
+      if (!res || !res.ok) alert((res && res.error) || 'No se pudo guardar. Reintenta.');
+      if (res && res.data) renderizarEstado(res.data);
+      else actualizarTodo();
+    });
   });
 
   // Abrir Drive / Sheets
@@ -277,6 +262,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Renderizar estado
   function renderizarEstado(estado) {
     if (!estado) return;
+    if (estado.sheetsUrl) inputSheetsUrl.value = estado.sheetsUrl;
 
     if (estado.servidorHora) {
       horaServidor.innerText = estado.servidorHora.split(' ')[1] || '--:--';
@@ -328,55 +314,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    const miNombre = inputNombre.value.trim().toLowerCase();
-    const soyYoQuienAtiende = estado.atendidoPor && estado.atendidoPor.toLowerCase() === miNombre;
-
-    // 4. PENDIENTE
-    if (faseActual === 'PENDIENTE') {
-      panelEstado.classList.add('pendiente');
-      statusIcon.innerText = '🔔';
-      statusTitle.innerText = `¡Turno ${estado.horaTurno || ''} Pendiente!`;
-      statusDesc.innerText = 'Toca el botón para responder la notificación y avisar al resto.';
-      badgeEstado.innerText = 'Alerta Activa';
-      badgeEstado.className = 'badge-pill alerta';
-
-      btnRevisar.className = 'btn-primary';
-      btnRevisar.style.display = 'block';
-      btnRevisar.innerText = '🙋 RESPONDER NOTIFICACIÓN';
-
-    // 5. EN PROCESO
-    } else if (faseActual === 'EN_PROCESO') {
-      if (soyYoQuienAtiende) {
-        panelEstado.classList.add('en-proceso');
-        statusIcon.innerText = '👀';
-        statusTitle.innerText = 'Estás revisando WhatsApp';
-        statusDesc.innerText = 'Presiona el botón al terminar de revisar para asentar en el Excel.';
-        badgeEstado.innerText = 'En Revisión';
-        badgeEstado.className = 'badge-pill alerta';
-
-        btnRevisar.className = 'btn-primary';
-        btnRevisar.style.display = 'block';
-        btnRevisar.innerText = '✅ TERMINÉ DE REVISAR';
-      } else {
-        panelEstado.classList.add('resuelto');
-        statusIcon.innerText = '🟡';
-        statusTitle.innerText = `${estado.atendidoPor} estará revisando WhatsApp`;
-        statusDesc.innerText = `Inició a las ${estado.horaInicioAtencion || ''} hs. Ya no es necesario que ingreses.`;
-        badgeEstado.innerText = 'En Curso';
-        badgeEstado.className = 'badge-pill';
-        btnRevisar.style.display = 'none';
-      }
-
-    // 6. COMPLETADO
-    } else {
-      panelEstado.classList.add('resuelto');
-      statusIcon.innerText = '🟢';
-      statusTitle.innerText = `Turno ${estado.horaTurno || ''} Cubierto`;
-      statusDesc.innerHTML = `Revisó: <strong>${estado.revisadoPor || 'Un compañero'}</strong> a las <strong>${estado.horaRevision || ''} hs</strong>.<br>Próxima revisión en 30 minutos.`;
-      badgeEstado.innerText = 'Al Día';
-      badgeEstado.className = 'badge-pill resuelto';
-      btnRevisar.style.display = 'none';
+    const pendiente = estado.fase === 'PENDIENTE';
+    panelEstado.classList.add(pendiente ? 'pendiente' : 'resuelto');
+    statusIcon.innerText = pendiente ? '??' : '?';
+    statusTitle.innerText = pendiente ? 'Hora de revisar WhatsApp' : 'Revision registrada';
+    const ultima = estado.revisadoPor ? `Revisado por ${estado.revisadoPor} a las ${estado.horaRevision}. ` : '';
+    statusDesc.innerText = ultima + (pendiente ? 'Revisa los mensajes y registra con un clic.' : `Proximo aviso: ${estado.proximaRevision}. Podes registrar otra revision antes si ya revisaste.`);
+    const restante = estado.proximaRevisionMs - Date.now();
+    if (!pendiente && restante > 0 && restante <= 10 * 60000) {
+      statusDesc.innerText = ultima + `En ${Math.ceil(restante / 60000)} minutos hay que revisar WhatsApp.`;
     }
+    badgeEstado.innerText = pendiente ? 'Pendiente' : 'Al dia';
+    badgeEstado.className = 'badge-pill ' + (pendiente ? 'alerta' : 'resuelto');
+    btnRevisar.style.display = 'block';
+    btnRevisar.disabled = guardando;
+    btnRevisar.innerText = guardando ? 'Guardando revision...' : 'YA REVISE WHATSAPP';
 
     renderizarLogs(estado.ultimosLogs);
   }
@@ -391,7 +343,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     logs.forEach((item) => {
       const el = document.createElement('div');
       el.className = 'log-item';
-      const duracion = item.horaInicio && item.horaFin ? ` (${item.horaInicio} ➔ ${item.horaFin})` : '';
+      const duracion = '';
       el.innerHTML = `
         <div class="log-item-left">
           <span class="log-turno">${item.turno}</span>
@@ -410,6 +362,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
+
+  const refresco = setInterval(actualizarTodo, 10000);
+  window.addEventListener('unload', () => clearInterval(refresco));
 
   chrome.runtime.onMessage.addListener((mensaje) => {
     if (mensaje.tipo === 'ESTADO_ACTUALIZADO') {

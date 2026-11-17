@@ -1,23 +1,15 @@
-# 📋 Configuración Oficial en Google Drive
+# API con registro de un clic
 
-El sistema ya está completamente conectado y configurado con tus enlaces oficiales:
+Proyecto: https://script.google.com/home/projects/1ZzPYBzGfoO0eDhhxGEieSHddUyhQI6C55rtI_S5cibQDmyv2N9kHCLjV/edit
 
-- **Planilla Principal (Registro):**  
-  👉 [Abrir Registro Revisión WhatsApp](https://docs.google.com/spreadsheets/d/1aFwQR-S6jEgBvFk9rNBySj8CGbpckWzZotzDqRUs6AA/edit)  
-  *ID:* `1aFwQR-S6jEgBvFk9rNBySj8CGbpckWzZotzDqRUs6AA`
+Reemplazar Codigo.gs por Codigo.js. Guardar y editar la implementacion web
+existente en Implementar > Administrar implementaciones > Nueva version.
+Conservar la URL actual. El endpoint acepta action registrar_revision con
+nombre, correo y requestId unico por clic. Reintentar con el mismo requestId.
 
-- **Planilla de Auditoría (Fallas y Errores):**  
-  👉 [Abrir Log Fallas y Errores WhatsApp](https://docs.google.com/spreadsheets/d/1AuYtFE6QV-TdJPL8-FjPy56iIh6wiTdpF4LBBsmn0fM/edit)  
-  *ID:* `1AuYtFE6QV-TdJPL8-FjPy56iIh6wiTdpF4LBBsmn0fM`
+El servidor agrega una fila COMPLETADO por registro y programa el siguiente
+aviso desde la hora guardada + frecuenciaMin. La configuracion se lee de la
+misma planilla que contiene Registro Detallado.
 
-- **URL de la API (Google Apps Script):**  
-  `https://script.google.com/macros/s/AKfycbziC1cvnny7cw_vgvinHD1-6G0VIRmjgGyDTCjp-MevQGcC6wBQkanDyUOJ14NvpmAujw/exec`
-
----
-
-## ⚡ Estado Actual: 100% Pre-configurado
-
-Ya dejé pre-configurados estos enlaces directamente dentro de la extensión:
-- No tienes que copiar ni pegar URLs en las computadoras.
-- Al abrir la extensión, ya detecta la conexión automáticamente.
-- Solo colocas tu **Nombre y Apellido** y tocas **INICIAR SERVICIO**.
+Actualizar a extension 1.3.0 y reiniciar Windows app. No usar el cliente viejo
+de dos pasos. Los archivos xlsx son copias independientes del registro online.

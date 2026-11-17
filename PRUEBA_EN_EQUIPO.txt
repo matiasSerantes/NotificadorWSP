@@ -1,0 +1,26 @@
+﻿NOTIFICADOR WHATSAPP 1.3.1 - UN SOLO CLIC
+
+1. Descomprimir este ZIP en una carpeta fija.
+2. Chrome: chrome://extensions > Modo desarrollador > Cargar descomprimida.
+   Seleccionar extension. Si ya estaba instalada, recargar la extension.
+3. Cada usuario guarda su propio nombre y correo y pulsa INICIAR SERVICIO.
+4. Recargar tambien WhatsApp Web.
+5. Despues de revisar mensajes, tocar YA REVISE WHATSAPP una sola vez.
+6. Verificar una fila COMPLETADO en Registro Detallado y el aviso al otro usuario.
+7. La proxima alerta es una hora despues del ultimo clic guardado del equipo:
+   registro 10:15 -> aviso 11:15; registro 11:25 -> aviso 12:25.
+8. Se puede registrar antes de que llegue el aviso. Ese clic reinicia el contador.
+
+No hay boton de inicio y fin. Todos deben usar esta version nueva.
+Internet es necesario. La sincronizacion al resto puede tardar hasta un minuto.
+
+Alternativa Windows: IniciarNotificadorWindows.bat, configurar datos propios.
+Usar el menu Ya revise WhatsApp de la bandeja para registrar en cualquier momento
+dentro del horario laboral. Reiniciar la app despues de actualizar.
+
+Planilla compartida:
+https://docs.google.com/spreadsheets/d/1aFwQR-S6jEgBvFk9rNBySj8CGbpckWzZotzDqRUs6AA/edit
+
+Diez minutos antes del proximo aviso aparece un preaviso. Cada registro muestra
+Revisado por el nombre del usuario y la hora. Otro clic del equipo reprograma
+el proximo aviso y su preaviso.

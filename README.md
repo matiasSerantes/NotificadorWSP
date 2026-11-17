@@ -1,72 +1,48 @@
-# 🔔 Notificador de Revisión de WhatsApp (NotificadorWSP)
+# Notificador WhatsApp - registro con un clic
 
-Sistema de alerta y auditoría para equipos de trabajo. Notifica automáticamente cada **30 minutos** (entre las **08:00 y las 18:00 hs**) la obligación de revisar WhatsApp, sincroniza en tiempo real a todos los miembros conectados y registra en planillas de **Google Sheets (Drive)** la hora de inicio, hora de fin y quién atendió.
+Despues de revisar los mensajes, tocar **Ya revise WhatsApp**. El sistema guarda
+usuario, correo, fecha y hora en Google Sheets y avisa al resto del equipo.
+No hay que marcar inicio y fin. Cada clic confirmado programa el proximo aviso
+segun la frecuencia de Configuracion (60 minutos actualmente).
 
----
+Ejemplos: 10:15 -> 11:15; siguiente registro a las 11:25 -> 12:25.
+Puede registrarse antes del aviso; ese registro reinicia el contador compartido.
+Se respetan el horario laboral y los dias configurados.
 
-## 💻 2 Opciones de Uso (Elige o combina ambas)
+## Chrome
 
-### 1. 🪟 Aplicación Nativa de Windows (Bandeja del sistema)
-- **100% independiente de Chrome**: No necesitas tener el navegador abierto.
-- Funciona directamente en Windows 10 y 11 con **cero instalaciones adicionales**.
-- **Icono en la barra de tareas** (al lado del reloj de Windows).
-- Lanza una **ventana emergente flotante en pantalla** (por encima de cualquier programa que uses) con sonido:
-  - `[ 🙋 Responder notificación ]`
-  - Al hacer clic cambia a: `[ ✅ Terminé de revisar ]`
-- **Auto-Arranque**: Se inicia automáticamente al encender la computadora.
-- Se ejecuta directamente con [`IniciarNotificadorWindows.bat`](file:///c:/Users/matias/programas%20personales/NotificadorWSP/IniciarNotificadorWindows.bat).
+Descomprimir, abrir chrome://extensions, activar Modo desarrollador y Cargar
+descomprimida seleccionando extension. Si ya estaba instalada, recargarla.
+Guardar nombre y correo propios, iniciar el servicio y recargar WhatsApp Web.
+La version de la extension es 1.3.1. Todos deben actualizarla para usar un clic.
 
-### 2. 🌐 Extensión para Google Chrome
-- Ubicada en la carpeta [`extension/`](file:///c:/Users/matias/programas%20personales/NotificadorWSP/extension).
-- Barra flotante interactiva dentro de `web.whatsapp.com` y ventana emergente de Chrome.
-- Ambas opciones (Windows y Chrome) están sincronizadas con la misma base de datos.
+## Windows
 
----
+Ejecutar IniciarNotificadorWindows.bat. El menu de la bandeja incluye
+Ya revise WhatsApp, disponible tambien antes del aviso. Reiniciar la app despues
+de actualizar los archivos.
 
-## ⚡ Instalador y Actualizador Todo en Uno: [`autoupdate.bat`](file:///c:/Users/matias/programas%20personales/NotificadorWSP/autoupdate.bat)
+## Planilla compartida
 
-El archivo `autoupdate.bat` hace todo automáticamente en la computadora del técnico:
-1. **Descarga la última versión** desde tu repositorio de GitHub (`matiasSerantes/NotificadorWSP`).
-2. **Crea el acceso directo** en el Escritorio.
-3. **Configura el inicio automático** con Windows en la carpeta `Startup`.
-4. **Inicia el programa** en segundo plano al lado del reloj.
+https://docs.google.com/spreadsheets/d/1aFwQR-S6jEgBvFk9rNBySj8CGbpckWzZotzDqRUs6AA/edit
 
----
+Registro Detallado es la fuente de verdad. Para conservar el historial anterior,
+las columnas Inicio y Fin guardan la misma hora en el flujo de un clic.
+Las revisiones anteriores conservan sus horas originales.
 
-## 🔄 Flujo de Trabajo en 2 Pasos
+No crear otra planilla ni otro Apps Script para los otros usuarios.
+Chrome consulta cada 30/60 segundos en segundo plano y cada 10 segundos con el
+popup abierto; programa una alarma para el vencimiento del intervalo.
+Windows consulta cada 10 segundos. Internet es necesario para guardar.
 
-```
-[ ALERTA CADA 30 MIN (08:00 a 18:00 hs) ]
-                  │
-                  ▼
-   A todo el equipo le salta la notificación:
-   "🔔 ¡Hora de revisar WhatsApp!"
-   Botón: [ 🙋 Responder notificación ]
-                  │
-     Matias hace clic en el botón:
-                  │
-                  ├──> 👥 AL RESTO DEL EQUIPO:
-                  │    Les aparece: "🟡 Matias estará revisando WhatsApp"
-                  │    (Dura 6 segundos y se cierra sola para no molestar).
-                  │
-                  └──> 👤 A MATIAS (Quien atiende):
-                       Le queda visible:
-                       "👀 Revisando WhatsApp... Presiona el botón al terminar de revisar."
-                       Botón: [ ✅ Terminé de revisar ]
-                              │
-                              ▼
-           Cuando Matias termina de atender los mensajes y toca "Terminé de revisar":
-           1. Se guarda en el Excel: Fecha, Día, Turno, Hora Inicio, Hora Fin, Nombre y Gmail.
-           2. El turno queda COMPLETADO para todos.
-```
+## Validacion
 
----
+node backend-test.cjs
+node regression-test.cjs
 
-## 📊 Planillas en Google Drive (Pre-configuradas)
+El codigo del servidor esta en google-apps-script/Codigo.js. Actualizar archivos
+locales o ejecutar autoupdate.bat no publica Apps Script automaticamente.
 
-- **Planilla de Registro:** [Registro Revisión WhatsApp](https://docs.google.com/spreadsheets/d/1aFwQR-S6jEgBvFk9rNBySj8CGbpckWzZotzDqRUs6AA/edit)  
-  *ID:* `1aFwQR-S6jEgBvFk9rNBySj8CGbpckWzZotzDqRUs6AA`
-- **Planilla de Auditoría:** [Log Fallas y Errores WhatsApp](https://docs.google.com/spreadsheets/d/1AuYtFE6QV-TdJPL8-FjPy56iIh6wiTdpF4LBBsmn0fM/edit)  
-  *ID:* `1AuYtFE6QV-TdJPL8-FjPy56iIh6wiTdpF4LBBsmn0fM`
-- **API Apps Script:**  
-  `https://script.google.com/macros/s/AKfycbziC1cvnny7cw_vgvinHD1-6G0VIRmjgGyDTCjp-MevQGcC6wBQkanDyUOJ14NvpmAujw/exec`
+Diez minutos antes del proximo aviso aparece un preaviso. Cada registro muestra
+Revisado por el nombre del usuario y la hora. Otro clic del equipo reprograma
+el proximo aviso y su preaviso.
