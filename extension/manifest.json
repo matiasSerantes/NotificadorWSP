@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Notificador Revisión WhatsApp",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Registra la revision de WhatsApp con un clic y programa el siguiente aviso desde la ultima revision del equipo.",
   "permissions": [
     "storage",

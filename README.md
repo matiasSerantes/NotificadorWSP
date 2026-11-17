@@ -14,7 +14,7 @@ Se respetan el horario laboral y los dias configurados.
 Descomprimir, abrir chrome://extensions, activar Modo desarrollador y Cargar
 descomprimida seleccionando extension. Si ya estaba instalada, recargarla.
 Guardar nombre y correo propios, iniciar el servicio y recargar WhatsApp Web.
-La version de la extension es 1.3.1. Todos deben actualizarla para usar un clic.
+La version de la extension es 1.3.2. Todos deben actualizarla para usar un clic.
 
 ## Windows
 
@@ -46,3 +46,6 @@ locales o ejecutar autoupdate.bat no publica Apps Script automaticamente.
 Diez minutos antes del proximo aviso aparece un preaviso. Cada registro muestra
 Revisado por el nombre del usuario y la hora. Otro clic del equipo reprograma
 el proximo aviso y su preaviso.
+
+La barra flotante de WhatsApp se mueve arrastrando su texto o fondo y recuerda
+la posicion al recargar. El boton Ya revise WhatsApp registra la revision.
