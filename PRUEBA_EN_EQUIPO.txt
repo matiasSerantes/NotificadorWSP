@@ -27,3 +27,8 @@ el proximo aviso y su preaviso.
 
 La barra flotante de WhatsApp se mueve arrastrando su texto o fondo y recuerda
 la posicion al recargar. El boton Ya revise WhatsApp registra la revision.
+
+ACTUALIZACIONES
+Ejecutar autoupdate.bat desde esta carpeta para descargar los archivos de GitHub.
+No requiere Git. Conservar Actualizar.ps1 junto al BAT.
+Luego recargar la extension en chrome://extensions y WhatsApp Web con Ctrl+R.

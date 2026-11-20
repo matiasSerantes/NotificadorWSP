@@ -49,3 +49,14 @@ el proximo aviso y su preaviso.
 
 La barra flotante de WhatsApp se mueve arrastrando su texto o fondo y recuerda
 la posicion al recargar. El boton Ya revise WhatsApp registra la revision.
+
+## Actualizar con doble clic
+
+Ejecutar autoupdate.bat en la carpeta de instalacion. Descargar la ultima
+version no requiere Git. El BAT ejecuta Actualizar.ps1, descarga main desde
+GitHub y actualiza los archivos del programa conservando la configuracion local.
+Si la app Windows estaba abierta, la reinicia despues de actualizar.
+Al terminar, recargar la extension en chrome://extensions y WhatsApp Web.
+
+Para instalar este actualizador por primera vez, descargar el ZIP nuevo y
+extraerlo en una carpeta. Mantener autoupdate.bat y Actualizar.ps1 juntos.
