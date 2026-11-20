@@ -1,4 +1,4 @@
-﻿NOTIFICADOR WHATSAPP 1.3.3 - UN SOLO CLIC
+﻿NOTIFICADOR WHATSAPP 1.3.4 - UN SOLO CLIC
 
 1. Descomprimir este ZIP en una carpeta fija.
 2. Chrome: chrome://extensions > Modo desarrollador > Cargar descomprimida.

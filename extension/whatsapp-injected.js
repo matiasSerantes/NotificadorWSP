@@ -82,11 +82,13 @@
     barra.className=estado.fase === 'PENDIENTE' ? 'alerta' : 'resuelto';
     const texto=document.createElement('span');
     texto.className='wsp-texto';
-    texto.textContent=estado.fase === 'PENDIENTE' ? 'Hora de revisar WhatsApp.' : `Revisado por ${estado.revisadoPor} a las ${estado.horaRevision}. Proximo aviso: ${estado.proximaRevision}.`;
+    const nombre = (estado.revisadoPor || '').trim().split(/\s+/)[0];
     const restante = estado.proximaRevisionMs - Date.now();
-    if (estado.fase === 'COMPLETADO' && restante > 0 && restante <= 10 * 60000) {
-      texto.textContent = `Revisado por ${estado.revisadoPor} a las ${estado.horaRevision}. En ${Math.ceil(restante / 60000)} minutos hay que revisar WhatsApp.`;
-    }
+    const minutos = Math.ceil(restante / 60000);
+    const revisado = nombre ? `Revisado por ${nombre}` : 'WhatsApp revisado';
+    texto.textContent = estado.fase === 'PENDIENTE'
+      ? (nombre ? `${revisado} ? Revisar WhatsApp` : 'Revisar WhatsApp')
+      : (Number.isFinite(minutos) && minutos > 0 ? `${revisado} ? Alerta en ${minutos} m` : revisado);
     const btn=document.createElement('button');
     btn.className='wsp-btn-revisar';
     btn.textContent=guardando ? 'Guardando...' : 'Ya revise WhatsApp';
