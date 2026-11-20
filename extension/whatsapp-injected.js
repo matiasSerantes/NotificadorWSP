@@ -6,6 +6,8 @@
   let estadoActual = null;
   let servicioActivo = false;
   let consultaPendiente = false;
+  let textoEstado = null;
+  let inicioPendiente = null;
 
   function colocarBarra(x, y) {
     const margen = 8;
@@ -54,6 +56,36 @@
       }
     });
   }
+  function actualizarMensaje() {
+    if (!textoEstado || !estadoActual || !servicioActivo) return;
+    const estado = estadoActual;
+    const ahora = Date.now();
+    const nombre = (estado.revisadoPor || '').trim().split(/\s+/)[0];
+    const vencimiento = Number(estado.proximaRevisionMs);
+    const tieneVencimiento = Number.isFinite(vencimiento) && vencimiento > 0;
+    const restante = vencimiento - ahora;
+    const vencido = estado.fase === 'PENDIENTE' || (tieneVencimiento && restante <= 0);
+    barra.className = vencido ? 'alerta' : 'resuelto';
+
+    if (vencido) {
+      if (inicioPendiente === null) inicioPendiente = tieneVencimiento ? vencimiento : ahora;
+      const minutosVencido = Math.max(0, Math.floor((ahora - inicioPendiente) / 60000));
+      textoEstado.textContent = minutosVencido % 2 === 0 ? 'Se excedio el tiempo' : 'Revisar urgente';
+      return;
+    }
+
+    inicioPendiente = null;
+    const frecuencia = Number(estado.configuracion && estado.configuracion.frecuenciaMin) || 60;
+    const transcurrido = tieneVencimiento ? ahora - (vencimiento - frecuencia * 60000) : 0;
+    if (transcurrido < 60000 || !tieneVencimiento) {
+      textoEstado.textContent = nombre ? `Revisado por ${nombre}` : 'WhatsApp revisado';
+    } else if (transcurrido >= 5 * 60000 && transcurrido < 6 * 60000 && nombre) {
+      textoEstado.textContent = `Ultima revision ${nombre}`;
+    } else {
+      textoEstado.textContent = `Proxima alarma en ${Math.ceil(restante / 60000)} m`;
+    }
+  }
+
   function actualizar(estado, activo) {
     estadoActual = estado;
     servicioActivo = activo;
@@ -65,6 +97,7 @@
     }
     if (!barra.isConnected) document.body.appendChild(barra);
     barra.replaceChildren();
+    textoEstado = null;
     if (!activo) { barra.style.display = 'none'; return; }
     barra.style.display = 'flex';
     if (!estado || !estado.ok) {
@@ -82,13 +115,8 @@
     barra.className=estado.fase === 'PENDIENTE' ? 'alerta' : 'resuelto';
     const texto=document.createElement('span');
     texto.className='wsp-texto';
-    const nombre = (estado.revisadoPor || '').trim().split(/\s+/)[0];
-    const restante = estado.proximaRevisionMs - Date.now();
-    const minutos = Math.ceil(restante / 60000);
-    const revisado = nombre ? `Revisado por ${nombre}` : 'WhatsApp revisado';
-    texto.textContent = estado.fase === 'PENDIENTE'
-      ? (nombre ? `${revisado} ? Revisar WhatsApp` : 'Revisar WhatsApp')
-      : (Number.isFinite(minutos) && minutos > 0 ? `${revisado} ? Alerta en ${minutos} m` : revisado);
+    textoEstado = texto;
+    actualizarMensaje();
     const btn=document.createElement('button');
     btn.className='wsp-btn-revisar';
     btn.textContent=guardando ? 'Guardando...' : 'Ya revise WhatsApp';
@@ -150,11 +178,13 @@
     consultarEstado();
   });
   const intervalo = setInterval(consultarEstado, 30000);
+  const relojMensajes = setInterval(actualizarMensaje, 1000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') consultarEstado();
   });
   window.addEventListener('pagehide', () => {
     clearInterval(intervalo);
+    clearInterval(relojMensajes);
     observador.disconnect();
   }, {once: true});
 })();
