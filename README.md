@@ -14,7 +14,7 @@ Se respetan el horario laboral y los dias configurados.
 Descomprimir, abrir chrome://extensions, activar Modo desarrollador y Cargar
 descomprimida seleccionando extension. Si ya estaba instalada, recargarla.
 Guardar nombre y correo propios, iniciar el servicio y recargar WhatsApp Web.
-La version de la extension es 1.3.2. Todos deben actualizarla para usar un clic.
+La version de la extension es 1.3.3. Todos deben actualizarla para usar un clic.
 
 ## Windows
 

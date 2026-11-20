@@ -13,6 +13,7 @@ const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbziC1cvnny7c
 const DEFAULT_SHEETS_URL = 'https://docs.google.com/spreadsheets/d/1aFwQR-S6jEgBvFk9rNBySj8CGbpckWzZotzDqRUs6AA/edit';
 
 let consultaEnCurso = false;
+let consultaPendiente = null;
 let accionEnCurso = false;
 let ultimaNotificacion = '';
 
@@ -136,7 +137,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 });
 
-async function verificarEstado() {
+function verificarEstado() {
+  if (!consultaPendiente) {
+    consultaPendiente = consultarEstadoServidor().finally(() => { consultaPendiente = null; });
+  }
+  return consultaPendiente;
+}
+
+async function consultarEstadoServidor() {
   const config = await obtenerConfig();
   if (!config.servicioActivo) {
     chrome.action.setBadgeText({ text: 'OFF' });
@@ -154,7 +162,7 @@ async function verificarEstado() {
   consultaEnCurso = true;
   try {
     const url = `${config.scriptUrl}?action=status&t=${Date.now()}`;
-    const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+    const resp = await fetch(url, { method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(20000) });
     const data = await resp.json();
 
     if (accionEnCurso) return;
@@ -189,6 +197,8 @@ async function verificarEstado() {
     await notificarPreaviso(data);
   } catch(err) {
     console.error('[NotificadorWSP] Error de conexion:',err);
+    ultimoEstado = {...ultimoEstado, ok: false, error: err.message};
+    difundirEstadoATabs(ultimoEstado);
   } finally {
     consultaEnCurso = false;
   }

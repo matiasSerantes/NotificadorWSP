@@ -3,6 +3,9 @@
   let barra, guardando = false;
   let posicion = null;
   let arrastre = null;
+  let estadoActual = null;
+  let servicioActivo = false;
+  let consultaPendiente = false;
 
   function colocarBarra(x, y) {
     const margen = 8;
@@ -52,15 +55,30 @@
     });
   }
   function actualizar(estado, activo) {
+    estadoActual = estado;
+    servicioActivo = activo;
     if (!barra) {
       barra = document.createElement('div');
       barra.id = 'wsp-notificador-bar';
       document.body.appendChild(barra);
       habilitarArrastre();
     }
+    if (!barra.isConnected) document.body.appendChild(barra);
     barra.replaceChildren();
-    if (!activo || !estado || !estado.enHorario) { barra.style.display='none'; return; }
-    barra.style.display='flex';
+    if (!activo) { barra.style.display = 'none'; return; }
+    barra.style.display = 'flex';
+    if (!estado || !estado.ok) {
+      barra.className = 'fuera-horario';
+      barra.textContent = estado && estado.error ? 'No se pudo sincronizar. Reintentando...' : 'Conectando con el notificador de WhatsApp...';
+      if (posicion) colocarBarra(posicion.x, posicion.y);
+      return;
+    }
+    if (!estado.enHorario) {
+      barra.className = 'fuera-horario';
+      barra.textContent = 'Fuera del horario de revision de WhatsApp';
+      if (posicion) colocarBarra(posicion.x, posicion.y);
+      return;
+    }
     barra.className=estado.fase === 'PENDIENTE' ? 'alerta' : 'resuelto';
     const texto=document.createElement('span');
     texto.className='wsp-texto';
@@ -85,8 +103,56 @@
     barra.append(texto,btn);
     if (posicion) colocarBarra(posicion.x, posicion.y);
   }
-  chrome.runtime.onMessage.addListener(m => {
-    if(m.tipo === 'ESTADO_ACTUALIZADO') chrome.storage.local.get(['servicioActivo'],r=>actualizar(m.estado,r.servicioActivo));
+  function consultarEstado() {
+    if (consultaPendiente || !chrome.runtime.id) return;
+    consultaPendiente = true;
+    try {
+      chrome.runtime.sendMessage({tipo: 'GET_ESTADO'}, respuesta => {
+        consultaPendiente = false;
+        if (chrome.runtime.lastError || !respuesta) {
+          actualizar({ok: false, error: 'Sin respuesta'}, servicioActivo);
+          return;
+        }
+        actualizar(respuesta.estado, respuesta.config.servicioActivo);
+      });
+    } catch (error) {
+      consultaPendiente = false;
+      if (barra) {
+        barra.style.display = 'flex';
+        barra.textContent = 'Notificador actualizado. Recarga WhatsApp Web para activarlo.';
+      }
+    }
+  }
+
+  chrome.runtime.onMessage.addListener(mensaje => {
+    if (mensaje.tipo === 'ESTADO_ACTUALIZADO') {
+      chrome.storage.local.get(['servicioActivo'], resultado => actualizar(mensaje.estado, resultado.servicioActivo));
+    }
   });
-  chrome.runtime.sendMessage({tipo:'GET_ESTADO'},r=>{if(r) actualizar(r.estado,r.config.servicioActivo);});
+  chrome.storage.onChanged.addListener((cambios, area) => {
+    if (area !== 'local' || !cambios.servicioActivo) return;
+    actualizar(estadoActual, cambios.servicioActivo.newValue);
+    if (cambios.servicioActivo.newValue) consultarEstado();
+  });
+
+  // WhatsApp puede reemplazar sus nodos al volver a conectar o cambiar de vista.
+  const observador = new MutationObserver(() => {
+    if (barra && !barra.isConnected && document.body) {
+      document.body.appendChild(barra);
+      if (posicion && servicioActivo) colocarBarra(posicion.x, posicion.y);
+    }
+  });
+  observador.observe(document.body, {childList: true});
+  chrome.storage.local.get(['servicioActivo'], resultado => {
+    actualizar(null, resultado.servicioActivo);
+    consultarEstado();
+  });
+  const intervalo = setInterval(consultarEstado, 30000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') consultarEstado();
+  });
+  window.addEventListener('pagehide', () => {
+    clearInterval(intervalo);
+    observador.disconnect();
+  }, {once: true});
 })();
